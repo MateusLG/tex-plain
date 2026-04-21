@@ -1,5 +1,6 @@
 mod api;
 mod claude_cli;
+mod cleanup;
 mod compile;
 mod templates;
 
@@ -45,6 +46,10 @@ struct Cli {
     /// Pula a compilação (só gera o .tex)
     #[arg(long)]
     no_compile: bool,
+
+    /// Mantém artefatos temporários (.aux, .log, etc.) e não organiza em pdf/ e tex/
+    #[arg(long)]
+    keep_artifacts: bool,
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -86,6 +91,14 @@ async fn main() -> Result<()> {
         match compile::compile(&tex_path, &cli.output)? {
             Ok(pdf) => {
                 eprintln!("✓ PDF gerado em {}", pdf.display());
+                if !cli.keep_artifacts {
+                    cleanup::organize(&cli.output, stem)?;
+                    eprintln!(
+                        "✓ Organizado: {} | {}",
+                        cli.output.join("pdf").join(format!("{stem}.pdf")).display(),
+                        cli.output.join("tex").join(format!("{stem}.tex")).display()
+                    );
+                }
                 return Ok(());
             }
             Err(err_log) => {
