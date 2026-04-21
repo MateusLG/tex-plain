@@ -32,6 +32,17 @@ struct ContentBlock {
 }
 
 pub async fn generate(prompt: &str) -> Result<String> {
+    call(prompt).await
+}
+
+pub async fn fix(tex: &str, error_log: &str) -> Result<String> {
+    let prompt = format!(
+        "O seguinte arquivo LaTeX falhou ao compilar. Corrija os erros e retorne APENAS o código LaTeX corrigido, sem explicações, sem markdown fences, sem texto fora do .tex.\n\n=== .tex atual ===\n{tex}\n\n=== log de erro ===\n{error_log}\n"
+    );
+    call(&prompt).await
+}
+
+async fn call(prompt: &str) -> Result<String> {
     let api_key = std::env::var("ANTHROPIC_API_KEY")
         .context("ANTHROPIC_API_KEY não está definida no ambiente")?;
 
@@ -60,12 +71,10 @@ pub async fn generate(prompt: &str) -> Result<String> {
 
     let parsed: Response = res.json().await.context("falha ao parsear resposta JSON")?;
 
-    let text = parsed
+    parsed
         .content
         .into_iter()
         .find(|b| b.block_type == "text")
         .and_then(|b| b.text)
-        .context("resposta da API não contém bloco de texto")?;
-
-    Ok(text)
+        .context("resposta da API não contém bloco de texto")
 }
