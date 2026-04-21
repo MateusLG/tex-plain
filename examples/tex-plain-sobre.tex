@@ -1,0 +1,97 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\title{tex-plain: uma ferramenta CLI em Rust para geração, compilação e organização de documentos LaTeX assistida por IA}
+\author{Mateus Lira Gomes}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Este artigo apresenta o \texttt{tex-plain}, uma ferramenta de linha de comando escrita em Rust que integra geração de código LaTeX por modelos de linguagem, compilação local via \texttt{latexmk} e organização automática dos artefatos resultantes. A motivação surge da experiência de anos editando LaTeX no Neovim e da necessidade de mitigar a poluição das pastas de projeto causada por arquivos temporários de compilação. O \texttt{tex-plain} herda o espírito do utilitário \texttt{limpa-tex}, escrito originalmente em C, e o expande com capacidades generativas modernas. Descrevem-se a arquitetura em cinco etapas, o \textit{stack} técnico adotado, o estado atual do projeto em versão 0.1 e as diretrizes filosóficas que guiam sua evolução, inspiradas na filosofia Unix de fazer uma coisa bem feita.
+\end{abstract}
+
+\section{Introdução}
+
+A edição de documentos em LaTeX oferece controle tipográfico raro em outros sistemas de processamento de texto, mas traz consigo um efeito colateral bem conhecido: a proliferação de arquivos temporários como \texttt{.aux}, \texttt{.log}, \texttt{.fdb\_latexmk}, \texttt{.fls}, \texttt{.out} e \texttt{.toc}, que rapidamente poluem o diretório de trabalho. Essa inconveniência, somada ao surgimento de modelos de linguagem capazes de redigir LaTeX com boa qualidade e à conveniência de plataformas como o Overleaf, motivou a concepção de uma ferramenta que unificasse três responsabilidades em um único binário: geração assistida por IA, compilação local automatizada e limpeza dos artefatos produzidos.
+
+Neste contexto nasce o \texttt{tex-plain}, cujo nome é um trocadilho entre \textit{explain} e \textit{tex}, preservando a linhagem do utilitário anterior \texttt{limpa-tex}. O projeto se propõe a fechar a lacuna entre o fluxo tradicional no editor local e a praticidade de serviços em nuvem, entregando ao usuário uma experiência offline, reprodutível e de uso único pela linha de comando.
+
+\section{Motivação e Origem}
+
+A gênese do \texttt{tex-plain} remonta a um incômodo recorrente do autor: após cada compilação, os diretórios de projeto enchiam-se de arquivos intermediários sem relevância para o documento final. A resposta inicial foi o \texttt{limpa-tex}, um pequeno utilitário em C que removia os artefatos temporários após a compilação e organizava os resultados em pastas dedicadas para PDFs e fontes LaTeX.
+
+Com a popularização de modelos generativos, parte substancial da redação em LaTeX passou a ser delegada a tais modelos, enquanto a compilação migrou para ambientes como o Overleaf. Essa combinação, embora prática, introduziu uma dependência de conectividade e fragmentou o fluxo de trabalho em várias ferramentas distintas. O \texttt{tex-plain} surge, portanto, como uma tentativa de reunir, em um único binário, as capacidades de geração, compilação e organização, preservando a autonomia e a portabilidade de uma solução local.
+
+\section{Arquitetura}
+
+O fluxo de execução do \texttt{tex-plain} divide-se em cinco etapas bem delimitadas, descritas a seguir.
+
+\subsection{Parsing de argumentos}
+
+A interface de linha de comando utiliza a \textit{crate} \texttt{clap} com \textit{derive macros}, permitindo declarar opções e subcomandos de forma concisa e obter mensagens de ajuda padronizadas. O usuário informa, entre outros parâmetros, o resumo de entrada e o tipo de \textit{template} desejado: artigo acadêmico, anotações ou estudo dirigido.
+
+\subsection{Montagem do prompt}
+
+Os \textit{templates} que orientam o comportamento do modelo são armazenados como arquivos \texttt{.txt} e embutidos no binário em tempo de compilação por meio da macro \texttt{include\_str!}. Essa estratégia garante que o executável permaneça autossuficiente, dispensando a necessidade de arquivos auxiliares no disco do usuário.
+
+\subsection{Geração via IA}
+
+A geração do código LaTeX é realizada por meio de uma chamada à API do Claude, utilizando a \textit{crate} \texttt{reqwest} de forma assíncrona com o \textit{runtime} \texttt{tokio}. Como alternativa, há um \textit{backend} que invoca o CLI do Claude Code como subprocesso, permitindo ao usuário aproveitar uma assinatura Max em vez de consumir créditos de API diretamente.
+
+\subsection{Compilação com auto-fix}
+
+O arquivo \texttt{.tex} resultante é submetido ao \texttt{latexmk}, que orquestra chamadas ao \texttt{pdflatex} e às demais ferramentas necessárias. Em caso de falha, o \textit{log} é capturado e reenviado ao modelo, que devolve uma versão corrigida do documento. O ciclo se repete até que a compilação tenha sucesso ou que um número configurável de tentativas seja atingido, conferindo ao sistema uma capacidade modesta de autorreparação.
+
+\subsection{Limpeza e organização}
+
+Após a compilação bem-sucedida, o \texttt{.pdf} e o \texttt{.tex} são realocados para subpastas dedicadas, \texttt{pdf/} e \texttt{tex/}, enquanto os arquivos temporários são removidos. Essa etapa reencarna o comportamento do \texttt{limpa-tex} original, agora integrado ao mesmo binário responsável pela geração e pela compilação.
+
+\section{Stack Técnico}
+
+O projeto adota Rust na edição 2024 como linguagem principal, escolha que alinha desempenho, segurança de memória e ergonomia para ferramentas de linha de comando. As dependências foram selecionadas com parcimônia e refletem padrões maduros da comunidade:
+
+\begin{itemize}
+    \item \textbf{clap}: construção declarativa da interface de linha de comando;
+    \item \textbf{reqwest} e \textbf{tokio}: cliente HTTP assíncrono para comunicação com a API;
+    \item \textbf{serde} e \textbf{serde\_json}: serialização e desserialização de dados estruturados;
+    \item \textbf{anyhow}: tratamento ergonômico de erros, favorecendo a legibilidade do código;
+    \item \textbf{dotenvy}: carregamento de variáveis de configuração a partir de arquivos \texttt{.env};
+    \item \textbf{latexmk}: \textit{driver} externo responsável pela compilação efetiva, acionado como subprocesso.
+\end{itemize}
+
+\section{Status Atual e Próximos Passos}
+
+Na versão 0.1 inicial, o \texttt{tex-plain} já apresenta o fluxo completo operacional: recebe um resumo, gera o LaTeX correspondente, compila com capacidade de correção iterativa e organiza os artefatos produzidos. As próximas iterações previstas incluem:
+
+\begin{itemize}
+    \item suporte a \textit{templates} customizados fornecidos pelo usuário em arquivos no disco;
+    \item \textit{cache} de \textit{prompts} para reduzir o consumo de \textit{tokens} durante \textit{retries};
+    \item modo interativo, que permita refinamentos sucessivos ao longo da sessão;
+    \item empacotamento para distribuição, com binários pré-compilados disponibilizados via GitHub Releases.
+\end{itemize}
+
+\section{Filosofia de Projeto}
+
+O \texttt{tex-plain} adere conscientemente à filosofia Unix: prioriza um binário único e portável, que faça uma coisa bem feita e opere de maneira offline após a instalação. A extensibilidade é reservada às dobras que efetivamente importam, evitando a armadilha clássica de generalização precoce, em que interfaces são abstraídas antes que existam casos de uso concretos que as justifiquem. O objetivo é manter a base de código pequena, auditável e acessível tanto para seu autor quanto para eventuais contribuidores externos.
+
+\section{Conclusão}
+
+O \texttt{tex-plain} representa a convergência entre um hábito de trabalho estabelecido, a necessidade pragmática de higienização de diretórios e a oportunidade aberta pela maturação dos modelos de linguagem. Ao unir geração, compilação e limpeza em um único binário escrito em Rust, o projeto oferece um fluxo coeso para quem já vive o ecossistema LaTeX no terminal, sem abrir mão da simplicidade. Sua trajetória, a partir do utilitário \texttt{limpa-tex} em C até a ferramenta atual, ilustra como pequenas inconveniências recorrentes podem inspirar a construção de soluções progressivamente mais ambiciosas, desde que ancoradas em princípios claros de design.
+
+\end{document}

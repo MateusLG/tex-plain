@@ -1,0 +1,30 @@
+Projeto: tex-plain
+
+Motivação:
+O autor usa LaTeX no Neovim para documentos, estudos dirigidos e anotações há anos, mas sempre enfrentou o problema dos arquivos temporários de compilação (.aux, .log, .fdb_latexmk etc.) que sujam as pastas do projeto. Isso levou à criação do "limpa-tex", um pequeno utilitário em C que apagava esses artefatos após a compilação e organizava as pastas em "PDFs" e "Arquivos LaTeX". Com o avanço das IAs generativas, a redação do LaTeX em si passou a ser terceirizada para modelos de linguagem, e a compilação passou a ser feita no Overleaf. Essa combinação deixou um gap: uma ferramenta que rodasse localmente, unisse geração via IA, compilação automática e limpeza de artefatos — tudo em um único binário, open-source.
+
+O que é o tex-plain:
+tex-plain é uma ferramenta de linha de comando escrita em Rust que recebe um resumo em texto e um template (artigo acadêmico, anotações ou estudo dirigido) e produz um PDF pronto, gerado por IA e compilado localmente. O nome é um trocadilho com "explain" + "tex", mantendo a linha do antigo utilitário "limpa-tex".
+
+Arquitetura:
+O fluxo é composto por cinco etapas:
+1. Parsing dos argumentos de linha de comando usando a crate clap (derive macros).
+2. Leitura do resumo e montagem do prompt a partir de templates armazenados em arquivos .txt, embutidos no binário via include_str! em tempo de compilação.
+3. Chamada à API do Claude (crate reqwest, async via tokio) para gerar o código LaTeX a partir do prompt. Um backend alternativo usa o CLI do Claude Code como subprocesso, permitindo aproveitar uma assinatura Max em vez de consumir créditos de API.
+4. Compilação do .tex via latexmk, com captura do log em caso de erro. Se a compilação falhar, o log é enviado de volta para a IA, que devolve um .tex corrigido; o processo se repete até um número configurável de tentativas.
+5. Limpeza e organização dos artefatos: o .pdf e o .tex são movidos para subpastas pdf/ e tex/, e os arquivos temporários são apagados automaticamente — reencarnando o comportamento do limpa-tex original.
+
+Stack técnico:
+- Linguagem: Rust (edição 2024)
+- CLI: clap
+- HTTP async: reqwest + tokio
+- Serialização: serde + serde_json
+- Erros ergonômicos: anyhow
+- Configuração via .env: dotenvy
+- Compilação LaTeX: latexmk (pdflatex)
+
+Status atual:
+O projeto está em versão 0.1 inicial, com fluxo de ponta a ponta funcionando: geração, compilação com auto-fix e organização. Próximas iterações devem trazer suporte a templates customizados via arquivos no disco, cache de prompts para reduzir tokens em retries, modo interativo e empacotamento para distribuição (binários pré-compilados em GitHub Releases).
+
+Filosofia:
+Prioriza-se um binário único e portável, que faça uma coisa bem feita (Unix philosophy), rode offline depois de instalado, e seja extensível apenas nas dobras que realmente importam — evitando a armadilha clássica de generalizar cedo demais.
