@@ -1,9 +1,10 @@
+mod api;
 mod templates;
 
+use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use std::fs;
 use std::path::PathBuf;
-use std::process;
 
 #[derive(Parser, Debug)]
 #[command(name = "tex-plain", version, about = "Gera documentos LaTeX a partir de resumos usando IA")]
@@ -31,19 +32,29 @@ pub enum Template {
     EstudoDirigido,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<()> {
+    let _ = dotenvy::dotenv();
+
     let cli = Cli::parse();
 
-    let summary = match fs::read_to_string(&cli.input) {
-        Ok(content) => content,
-        Err(e) => {
-            eprintln!("Erro ao ler {}: {}", cli.input.display(), e);
-            process::exit(1);
-        }
-    };
+    let summary = fs::read_to_string(&cli.input)
+        .with_context(|| format!("erro ao ler {}", cli.input.display()))?;
 
     let prompt = templates::build_prompt(&cli.template, &summary);
 
-    println!("--- PROMPT GERADO ---");
-    println!("{}", prompt);
+    eprintln!("→ Gerando LaTeX via Claude...");
+    let tex = api::generate(&prompt).await?;
+
+    fs::create_dir_all(&cli.output)
+        .with_context(|| format!("erro ao criar {}", cli.output.display()))?;
+
+    let stem = cli.input.file_stem().and_then(|s| s.to_str()).unwrap_or("output");
+    let tex_path = cli.output.join(format!("{stem}.tex"));
+
+    fs::write(&tex_path, &tex)
+        .with_context(|| format!("erro ao gravar {}", tex_path.display()))?;
+
+    eprintln!("✓ Escrito em {}", tex_path.display());
+    Ok(())
 }
